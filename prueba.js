@@ -47,7 +47,7 @@ const init = async () => {
     );
     
     const addresses = await web3.eth.getAccounts();
-    const addressSender = addresses[9];
+    const addressSender = addresses[8];
 
     app.get('/get/block/:hashBlock', async (req,res,next) => {
         if(req.headers.api !== API_KEY){
@@ -71,15 +71,20 @@ const init = async () => {
         }else{
         const hashTransaction = req.params.hashTransaction;
         const result = await web3.eth.getTransaction(hashTransaction)
-       
-        console.log(abiDecoder.decodeMethod(result.input))
+        
+        console.log(result)
 
+        console.log(abiDecoder.decodeMethod(result.input))
+        /*
         .then((leer) => {
             res.status(201).json(leer);
         }).catch(err => {
             res.status(403).send("Impossible to find transaction");
         });
-        }
+       
+
+        */
+    }
     })
 
     
@@ -189,24 +194,44 @@ const init = async () => {
     app.post('/post/file',async (req,res,next) =>{
         if(req.headers.api !== API_KEY){
             next(new Error("El API KEY incluido en la cabecera de la petición es incorrecto"));
-        }else if(req.files.file === '' || req.files.file === '{}'){
-            res.status(400).send("Invalid file")
+        }else if(!req.files.file){
+            res.status(400).send("Please send a valid file")
         }else{
 
-        //const buffer = Buffer.from(req.files.file.data);
-        //const buffer = req.files.file.data;
+        const buffer = req.files.file.data;
+        const bufferHEx = buffer.toString('base64');
+        console.log(bufferHEx)
+        console.log(Buffer.from(bufferHEx,'base64'));
+        console.log(buffer.toString('utf-8'))
+        
+        console.log(req.files.file)
+
+        const datat= await {name: req.files.file.name,size: req.files.file.size, encoding: req.files.file.encoding, tempFilePath: req.files.file.tempFilePath, truncated: req.files.file.truncated, mimetype: req.files.file.mimetype, md5: req.files.file.md5, mv: req.files.file.mv, data: bufferHEx  }
+        console.log(JSON.stringify(datat))
+        console.log(typeof(JSON.stringify(datat)))
+
+        const receipt = await contract.methods.createTask(JSON.stringify(datat)).send({
+            from: addressSender,
+            gas: 3000000000
+        })
+        res.status(200).json(receipt);
+        }
+    
+        /*
         const file = req.files.file;
         const fileStr = JSON.stringify(file)
         console.log("Información del archivo" + file)
         console.log("JSON que introducimos con la información del archivo" + fileStr) 
         
-        const receipt = await contract.methods.createTask(fileStr).send({
-            from: addressSender,
-            gas: 3000000000
-        })
+        const receipt = await contract.methods.createTask(fileStr).estimateGas({from: addressSender})
         console.log(receipt)
+        
 
-        res.status(200).json(receipt);
+        const receipt2 = await contract.methods.createTask(fileStr).send({
+            from: addressSender,
+            gas: 8000000000
+        })
+        res.status(200).json(receipt2);
         }
         /*
         const buffer = Buffer.from(req.files.file.data)
