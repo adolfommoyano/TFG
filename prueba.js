@@ -7,7 +7,7 @@ const fileupload = require ('express-fileupload');
 require('dotenv').config();
 const openssl = require('openssl-nodejs');
 const fs = require('fs');
-const zlib = require ('zlib');
+const zlib = new require('zlib');
 const https = require('https');
 const API_KEY = process.env.API_KEY;
 app.use(express.json());
@@ -17,6 +17,7 @@ app.use(express.urlencoded({extended:true}));
 const abiDecoder = require('abi-decoder');
 const { StringDecoder } = require('string_decoder');
 const { stringify } = require('querystring');
+const { Console } = require('console');
 abiDecoder.addABI(Task.abi);
 
 
@@ -35,7 +36,7 @@ https.createServer({
 
 
 const init = async () => {
-    const web3 = new Web3('http://localhost:9545');
+    const web3 = new Web3('http://127.0.0.1:9545');
 
     const id = await web3.eth.net.getId();
     const network = Task.networks[id];
@@ -48,20 +49,37 @@ const init = async () => {
     const addresses = await web3.eth.getAccounts();
     const addressSender = addresses[9];
 
-    app.get('/get/hashBlock/:hashBlock', async (req,res,next) => {
+    app.get('/get/block/:hashBlock', async (req,res,next) => {
+        if(req.headers.api !== API_KEY){
+            next(new Error("El API KEY incluido en la cabecera de la petición es incorrecto"));
+        }else{
         const hashBlock = req.params.hashBlock;
         web3.eth.getTransactionFromBlock(hashBlock).then(console.log)
-
-
-
+        .then((leer) => {
+            res.status(201).json(leer);
+        }).catch(err => {
+            res.status(403).send("Impossible to find block");
+        });
+        }
     })
 
     app.get('/get/transaction/:hashTransaction', async (req,res,next) => {
+        if(req.headers.api !== API_KEY){
+            next(new Error("El API KEY incluido en la cabecera de la petición es incorrecto"));
+        }else if(req.params.hashTransaction === ''){
+            res.status(400).send("Invalid transaction hash")
+        }else{
         const hashTransaction = req.params.hashTransaction;
         const result = await web3.eth.getTransaction(hashTransaction)
-        console.log (result)
-        console.log (result.input)
+       
         console.log(abiDecoder.decodeMethod(result.input))
+
+        .then((leer) => {
+            res.status(201).json(leer);
+        }).catch(err => {
+            res.status(403).send("Impossible to find transaction");
+        });
+        }
     })
 
     
@@ -90,16 +108,23 @@ const init = async () => {
         }else{
             console.log("El API KEY incluido en la cabecera de la petición es correcto");
             const id = req.params.id;
-            const leer = await contract.methods.readTask(id).call();
-            console.log(leer);
+            const leer = await contract.methods.readTask(id).call()
+
+            .then((leer) => {
+                res.status(201).json(leer);
+            }).catch( err => {
+                res.status(403).send("Impossible to find id");
+            });
+            console.log(leer)
             //res.send(leer); Por si queremos que aparezca en la respuesta
+            
         }
-        next();
+        
         
     });
 
     //Definimos el middleware (respuesta a una petición get al servidor express montando (localhost:3000))
-    app.get('/get/hash/:hash', async (req, res, next) => {
+    app.get('/get/contentHash/:hash', async (req, res, next) => {
 
         //Queremos ver los detalles de una llamada al método insert usando la dirección 0 de prueba que nos proporciona Truffle 
         //const receipt = await contract.methods.createTask("Hola que tal").send({
@@ -116,11 +141,18 @@ const init = async () => {
 
         if(req.headers.api !== API_KEY){
             next(new Error("El API KEY incluido en la cabecera de la petición es incorrecto"));
+        }else if(req.params.hash === ''){
+            res.status(400).send("Invalid content hash")
         }else{
             console.log("El API KEY incluido en la cabecera de la petición es correcto");
             const hash = req.params.hash;
             console.log("Buscando hash:" + hash)
-            const leer = await contract.methods.readTaskByHash(hash).call();
+            const leer = await contract.methods.readTaskByHash(hash).call()
+            .then((leer) => {
+                res.status(201).json(leer);
+            }).catch( err => {
+                res.status(403).send("Impossible to find hash");
+            });
             console.log(leer);
             //res.send(leer); Por si queremos que aparezca en la respuesta
         }
@@ -132,10 +164,11 @@ const init = async () => {
 
         if(req.headers.api !== API_KEY){
             next(new Error("El API KEY incluido en la cabecera de la petición es incorrecto"));
+        }else if(JSON.stringify(req.body) === '' || JSON.stringify(req.body) === '{}'){
+            res.status(400).send("Invalid JSON")
         }else{
-        
         console.log("El API KEY incluido en la cabecera de la petición es correcto");
-
+            
         const stringBody = JSON.stringify(req.body);
         const jsonresult = JSON.parse(stringBody);
         console.log(typeof stringBody,"String que vas a introducir:",stringBody);
@@ -145,24 +178,36 @@ const init = async () => {
             from: addressSender,
             gas:3000000
         })
+
         console.log(receipt);
         //res.send(receipt); Por si queremos que aparezca en la respuesta
+        res.status(200).json(receipt);
         }
-        next();
 
     });
 
     app.post('/post/file',async (req,res,next) =>{
-        const buffer = Buffer.from(req.files.file.data);
-        const bufferStr = JSON.stringify(buffer)
-        console.log("buffer " + buffer)
-        console.log("buffer JSON" + bufferStr) 
+        if(req.headers.api !== API_KEY){
+            next(new Error("El API KEY incluido en la cabecera de la petición es incorrecto"));
+        }else if(req.files.file === '' || req.files.file === '{}'){
+            res.status(400).send("Invalid file")
+        }else{
+
+        //const buffer = Buffer.from(req.files.file.data);
+        //const buffer = req.files.file.data;
+        const file = req.files.file;
+        const fileStr = JSON.stringify(file)
+        console.log("Información del archivo" + file)
+        console.log("JSON que introducimos con la información del archivo" + fileStr) 
         
-        const receipt = await contract.methods.createTask(bufferStr).send({
+        const receipt = await contract.methods.createTask(fileStr).send({
             from: addressSender,
             gas: 3000000000
         })
         console.log(receipt)
+
+        res.status(200).json(receipt);
+        }
         /*
         const buffer = Buffer.from(req.files.file.data)
         const bufferHex = buffer.toString('base64')
@@ -205,10 +250,14 @@ const init = async () => {
         */
     });
 
+    
+
     app.post('/update/:id',async (req,res,next) =>{
 
         if(req.headers.api !== API_KEY){
             next(new Error("El API KEY incluido en la cabecera de la petición es incorrecto"));
+        }else if(req.params.id === '' || req.params.id === '{}'){
+            res.status(400).send("Invalid JSON")
         }else{
         
         console.log("El API KEY incluido en la cabecera de la petición es correcto");
@@ -221,15 +270,23 @@ const init = async () => {
             gas:3000000
         })
         console.log(receipt);
-        //res.send(receipt); Por si queremos que aparezca en la respuesta
-        }
 
-        next();
+        //res.send(receipt); Por si queremos que aparezca en la respuesta
+        res.status(200).json(receipt);
+        }
         
 
     });
 
-    app.get('/delete/:id', async (req,res, next) =>{
+    app.post('/update', async (req, res,next) => {
+        if(req.headers.api !== API_KEY){
+            next(new Error("El API KEY incluido en la cabecera de la petición es incorrecto"));
+        }else{
+        res.status(400).send("Invalid id for update");
+        }    
+    });
+
+    app.get('/delete/:id', async (req,res,next) =>{
 
         if(req.headers.api !== API_KEY){
             next(new Error("El API KEY incluido en la cabecera de la petición es incorrecto"));
@@ -246,9 +303,18 @@ const init = async () => {
         console.log(receipt);
         //res.send(receipt); Por si queremos que aparezca en la respuesta
     }
-    next();
 
     });
+
+    app.post('/delete', async (req, res,next) => {
+        if(req.headers.api !== API_KEY){
+            next(new Error("El API KEY incluido en la cabecera de la petición es incorrecto"));
+        }else{
+        res.status(400).send("Invalid id for delete");
+        }    
+    });
+
+
 }
 
 init();
